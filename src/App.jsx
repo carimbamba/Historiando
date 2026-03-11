@@ -6,6 +6,22 @@ import MapaSala    from "./pages/MapaSala";
 import Ocorrencias from "./pages/Ocorrencias";
 import Analytics   from "./pages/Analytics";
 import Conteudo    from "./pages/Conteudo";
+import LoginPage   from "./pages/LoginPage";
+
+const isAuthenticated = () => {
+  try {
+    const raw = localStorage.getItem("historiando_session");
+    if (!raw) return false;
+    const session = JSON.parse(raw);
+    return Date.now() < session.expiresAt;
+  } catch {
+    return false;
+  }
+};
+
+function PrivateRoute({ children }) {
+  return isAuthenticated() ? children : <Navigate to="/login" replace />;
+};
 
 export default function App() {
   const { T } = useTheme();
@@ -17,15 +33,32 @@ export default function App() {
       fontFamily: "'DM Sans', sans-serif",
       transition: "background 0.2s",
     }}>
-      <Sidebar />
+     {isAuthenticated() && <Sidebar />}
+
       <main style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
         <Routes>
-          <Route path="/"            element={<Dashboard />}   />
-          <Route path="/mapa"        element={<MapaSala />}    />
-          <Route path="/ocorrencias" element={<Ocorrencias />} />
-          <Route path="/analytics"   element={<Analytics />}   />
-          <Route path="/conteudo"    element={<Conteudo />}    />
-          <Route path="*"            element={<Navigate to="/" replace />} />
+          {/* Rota pública */}
+          <Route path="/login" element={<LoginPage />} />
+
+          {/* Rotas protegidas */}
+          <Route path="/" element={
+            <PrivateRoute><Dashboard /></PrivateRoute>
+          } />
+          <Route path="/mapa" element={
+            <PrivateRoute><MapaSala /></PrivateRoute>
+          } />
+          <Route path="/ocorrencias" element={
+            <PrivateRoute><Ocorrencias /></PrivateRoute>
+          } />
+          <Route path="/analytics" element={
+            <PrivateRoute><Analytics /></PrivateRoute>
+          } />
+          <Route path="/conteudo" element={
+            <PrivateRoute><Conteudo /></PrivateRoute>
+          } />
+
+          {/* Rota desconhecida → login */}
+          <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
       </main>
     </div>
