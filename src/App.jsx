@@ -7,6 +7,7 @@ import Ocorrencias from "./pages/Ocorrencias";
 import Analytics   from "./pages/Analytics";
 import Conteudo    from "./pages/Conteudo";
 import LoginPage   from "./pages/LoginPage";
+import RegisterPage from "./pages/RegisterPage";
 
 const isAuthenticated = () => {
   try {
@@ -39,6 +40,7 @@ export default function App() {
         <Routes>
           {/* Rota pública */}
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/register" element={<RegisterPage />} />
 
           {/* Rotas protegidas */}
           <Route path="/" element={
