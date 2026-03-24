@@ -8,6 +8,8 @@ import Analytics   from "./pages/Analytics";
 import Conteudo    from "./pages/Conteudo";
 import LoginPage   from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
+import ForgotPasswordPage from "./pages/ForgotPasswordPage";
+import ResetPasswordPage  from "./pages/ResetPasswordPage";
 
 const isAuthenticated = () => {
   try {
@@ -40,7 +42,9 @@ export default function App() {
         <Routes>
           {/* Rota pública */}
           <Route path="/login" element={<LoginPage />} />
-          <Route path="/register" element={<RegisterPage />} />
+          <Route path="/register" element={<RegisterPage />}/>
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route  path="/reset-password"  element={<ResetPasswordPage />}  />
 
           {/* Rotas protegidas */}
           <Route path="/" element={
