@@ -403,7 +403,7 @@ export default function ForgotPasswordPage() {
               <div style={{ background: "#F8FAFC", border: "1px solid #E2E8F0", borderRadius: 12, padding: "16px 18px", marginBottom: 24 }}>
                 <p style={{ margin: "0 0 12px", fontSize: 12, fontWeight: 700, color: "#64748B", letterSpacing: 0.5, textTransform: "uppercase" }}>Próximos passos</p>
                 {[
-                  "Abra o e-mail com o assunto "Redefinir senha — Historiando"",
+                  "Abra o e-mail com o assunto 'Redefinir senha — Historiando'",
                   "Clique no link de redefinição",
                   "O link expira em 1 hora e só pode ser usado uma vez",
                   "Não encontrou? Verifique a pasta de spam",
