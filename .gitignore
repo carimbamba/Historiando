@@ -1,8 +1,23 @@
+# Dependências de runtime dos pacotes
 node_modules/
 dist/
-dist-ssr/
-*.local
+build/
+
+# Variáveis de ambiente (nunca commitar)
 .env
 .env.local
+.env.*.local
+
+# Logs
+*.log
+npm-debug.log*
+
+# Editor
+.vscode/settings.json
+.idea/
+*.swp
+*.swo
+
+# OS
 .DS_Store
 Thumbs.db

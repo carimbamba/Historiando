@@ -1,25 +1,16 @@
 {
-  "name": "historiando",
+  "name": "historiando-monorepo",
   "version": "1.0.0",
-  "description": "Plataforma de gestão pedagógica e ensino gamificado de História.",
+  "description": "Historiando — Plataforma de gestão pedagógica e ensino gamificado de História.",
   "private": true,
-  "type": "module",
+  "workspaces": [
+    "frontend",
+    "backend"
+  ],
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview"
-  },
-  "dependencies": {
-    "@hookform/resolvers": "^5.2.2",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "react-hook-form": "^7.71.2",
-    "react-router-dom": "^6.26.0",
-    "recharts": "^2.12.7",
-    "zod": "^4.3.6"
-  },
-  "devDependencies": {
-    "@vitejs/plugin-react": "^4.3.1",
-    "vite": "^5.3.4"
+    "dev:frontend": "npm run dev --workspace=frontend",
+    "dev:backend":  "npm run dev --workspace=backend",
+    "migrate":      "npm run migrate --workspace=backend",
+    "install:all":  "npm install"
   }
 }
