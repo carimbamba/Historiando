@@ -22,7 +22,8 @@ const normalizeTurno = (t) => {
 };
 
 /**
- * Le uma planilha binária (.xlsx ou .csv) e de-serializa no modelo fixo do Historiando
+ * Lê uma planilha binária (.xlsx ou .csv) e de-serializa de forma inteligente
+ * Tolerante a arquivos sem headers ou planilhas cruas.
  */
 function parseWorksheet(buffer, originalname) {
   let aoa = []; // Array of Arrays
@@ -38,61 +39,126 @@ function parseWorksheet(buffer, originalname) {
     aoa = xlsx.utils.sheet_to_json(worksheet, { header: 1, blankrows: false });
   }
 
-  // Expect at least Line 2 and Line 5
-  if (aoa.length < 3) {
-    throw new Error("Planilha vazia ou em formato incorreto. Baixe o template padrão.");
+  if (aoa.length === 0) {
+    throw new Error("A planilha está vazia.");
   }
 
-  // Linha 1 = headers da turma
-  // Linha 2 = dados da turma [Turma, Série, Turno, Ano] -> indices 0, 1, 2, 3
-  const turmaRow = aoa[1] || [];
-  const turmaName = String(turmaRow[0] || "").trim();
-  const serie = normalizeSerie(turmaRow[1]);
-  const turno = normalizeTurno(turmaRow[2]);
-  
-  if (!turmaName) {
-    throw new Error("Nome da Turma não encontrado na Planilha (linha 2, coluna A).");
-  }
+  // 1. Extrair Detalhes da Turma (Heurística)
+  let turmaNome = "";
+  let serie = "6_fund";
+  let turno = "matutino";
 
-  const turma = {
-    nome: turmaName,
-    serie,
-    turno,
-    maxAlunos: 50 // Default max
-  };
-
-  // Alunos vêm da linha 5 diante (índice 4 no array se a linha 3 for blank, mas para segurança, vamos iterar pulando as primeiras q n batem c aluno)
-  // Linha 4 geralmente tem [Nome, Matrícula, Email, Telefone, Responsável]
-  // Então dados a partir da linha 5 (index 4)
-  const alunos = [];
+  const isTemplateForm = String(aoa[0]?.[0] || "").toLowerCase() === "turma";
   
-  let startedStudents = false;
-  for (let i = 2; i < aoa.length; i++) {
-    const row = aoa[i];
-    // Acha a linha header
-    if (!startedStudents) {
-      if (row[0] && String(row[0]).toLowerCase().includes("nome")) {
-        startedStudents = true;
-      }
-      continue;
+  if (isTemplateForm) {
+    turmaNome = String(aoa[1]?.[0] || "").trim();
+    serie = normalizeSerie(aoa[1]?.[1]);
+    turno = normalizeTurno(aoa[1]?.[2]);
+  } else {
+    // Tenta caçar a palavra "Turma" nos primeiros registros
+    for (let i = 0; i < Math.min(5, aoa.length); i++) {
+       const row = aoa[i];
+       if (!row) continue;
+       for (let j = 0; j < row.length; j++) {
+         const val = String(row[j] || "").trim();
+         if (val.toLowerCase().startsWith("turma")) {
+            const spl = val.split(/[:=]/);
+            if (spl.length > 1 && spl[1].trim()) turmaNome = spl[1].trim();
+            else if (row[j+1]) turmaNome = String(row[j+1]).trim();
+         }
+       }
     }
+    // Fallback: usar o nome do arquivo se a Turma não for declarada
+    if (!turmaNome) {
+      turmaNome = originalname.replace(/\.[^/.]+$/, "").replace(/[_-]/g, " ");
+      if (turmaNome.toLowerCase() === "importar" || !turmaNome) turmaNome = "Nova Turma " + Date.now();
+    }
+  }
 
-    const n = String(row[0] || "").trim();
-    if (!n) continue;
+  const turma = { nome: turmaNome, serie, turno, maxAlunos: 50 };
 
-    const matricula = String(row[1] || `IMP-${Date.now()}-${i}`).trim();
-    // Default fallback de email baseado na matrícula para caso não possuam email para a plataforma
-    const email = String(row[2] || "").trim() || `aluno${matricula}@escola.historiando.local`;
-    const respTelefone = String(row[3] || "").trim();
-    const respNome = String(row[4] || "").trim();
+  // 2. Extrair Alunos (Heurística Robusta)
+  let alunos = [];
+  let nameCol = -1;
+  let matCol = -1;
+  let emailCol = -1;
+  let headerRowIdx = -1;
 
-    alunos.push({
-      nomeCompleto: n,
-      matricula,
-      email,
-      responsavelTelefone: respTelefone || null,
-      responsavelNome: respNome || null,
-    });
+  // Busca na linha 0 até 10 para identificar cabeçalhos explícitos
+  for (let i = 0; i < Math.min(10, aoa.length); i++) {
+    const row = aoa[i];
+    if (!row) continue;
+    let foundNameHeader = false;
+    for (let j = 0; j < row.length; j++) {
+      const cell = String(row[j] || "").toLowerCase().trim();
+      if (cell.includes("nome") || cell === "aluno") { nameCol = j; foundNameHeader = true; }
+      else if (cell.includes("matr") || cell === "ra" || cell.includes("registro")) { matCol = j; }
+      else if (cell.includes("email") || cell.includes("e-mail")) { emailCol = j; }
+    }
+    if (foundNameHeader) {
+      headerRowIdx = i;
+      break;
+    }
+  }
+
+  // Lógica de Extração de Linhas
+  if (headerRowIdx !== -1) {
+    // A planilha TEM cabeçalho. Iteramos das linhas seguintes.
+    for (let i = headerRowIdx + 1; i < aoa.length; i++) {
+      const row = aoa[i];
+      if (!row || row.length === 0) continue;
+      
+      const nome = String(row[nameCol] || "").trim();
+      if (!nome) continue; // Nome é obrigatório
+      
+      const matricula = matCol !== -1 ? String(row[matCol] || "").trim() : "";
+      const email = emailCol !== -1 ? String(row[emailCol] || "").trim() : "";
+      
+      alunos.push({ 
+        nomeCompleto: nome,
+        matricula: matricula || `ID-${Date.now()}-${i}`,
+        email: email || `aluno${Date.now()}-${i}@escola.historiando.local`
+      });
+    }
+  } else {
+    // A planilha NÃO TEM cabeçalho (ex: é só uma lista jogada "Nome, Matrícula").
+    // Vamos adivinhar coluna por coluna para cada linha.
+    // Ignoramos a primeira linha se coincidir com o "templateForm" que já lemos a turma.
+    let startIdx = isTemplateForm ? 2 : 0;
+    
+    for (let i = startIdx; i < aoa.length; i++) {
+      const row = aoa[i];
+      if (!row || row.length === 0) continue;
+      
+      let nome = "", matricula = "", email = "";
+      
+      for (let j = 0; j < row.length; j++) {
+        const val = String(row[j] || "").trim();
+        if (!val) continue;
+        
+        if (val.includes("@")) {
+          email = val;
+        } else if (/^[\d.-]+$/.test(val) || val.toLowerCase().includes("ra")) {
+          // É primordialmente número -> assume que é Matrícula
+          if (!matricula) matricula = val;
+        } else if (val.length > 2 && isNaN(val)) {
+          // É puramente texto -> assume que é Nome
+          if (!nome) nome = val;
+        }
+      }
+      
+      if (nome) {
+        alunos.push({
+          nomeCompleto: nome,
+          matricula: matricula || `ID-${Date.now()}-${i}`,
+          email: email || `aluno${Date.now()}-${i}@escola.historiando.local`
+        });
+      }
+    }
+  }
+
+  if (alunos.length === 0) {
+    throw new Error("Nenhum aluno identificado. Verifique se a planilha contém nomes legíveis.");
   }
 
   if (alunos.length > 50) {
