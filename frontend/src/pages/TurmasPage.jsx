@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTheme } from "../context/ThemeContext";
+import ImportadorTurmaModal from "../components/ImportadorTurmaModal";
 
 const API = import.meta.env.VITE_API_URL || "http://localhost:3001";
 
@@ -159,6 +160,7 @@ export default function TurmasPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [modal, setModal] = useState(null); // null | "new" | turmaObj
+  const [showImportador, setShowImportador] = useState(false);
   const [deleting, setDeleting] = useState(null);
 
   const fetchTurmas = useCallback(async () => {
@@ -223,6 +225,13 @@ export default function TurmasPage() {
               fontFamily: "'DM Sans',sans-serif",
             }}
           />
+          <button onClick={() => setShowImportador(true)} style={{
+            padding: "9px 20px", borderRadius: 10, border: `1.5px solid ${T.indigo}40`, background: "transparent",
+            color: T.indigo, fontWeight: 700, fontSize: 13, cursor: "pointer",
+            display: "flex", alignItems: "center", gap: 6,
+          }}>
+            <span style={{ fontSize: 16 }}>📥</span> Importar
+          </button>
           <button onClick={() => setModal("new")} style={{
             padding: "9px 20px", borderRadius: 10, border: "none", background: T.indigo,
             color: "#fff", fontWeight: 700, fontSize: 13, cursor: "pointer",
@@ -323,6 +332,12 @@ export default function TurmasPage() {
       </div>
 
       {/* Modals */}
+      {showImportador && (
+        <ImportadorTurmaModal
+          onClose={() => setShowImportador(false)}
+          onSaved={() => { setShowImportador(false); fetchTurmas(); }}
+        />
+      )}
       {modal && (
         <TurmaModal
           T={T}

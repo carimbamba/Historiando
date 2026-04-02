@@ -3,11 +3,107 @@
 const express      = require("express");
 const pool         = require("../db/client");
 const authenticate = require("../middleware/authenticate");
+const upload       = require("../middleware/upload");
+const { parseWorksheet, generateTemplateBuffer } = require("../utils/spreadsheetParser");
 
 const router = express.Router();
 
 // All routes require authentication
 router.use(authenticate);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/turmas/import/template — Download template
+// ─────────────────────────────────────────────────────────────────────────────
+router.get("/import/template", (req, res) => {
+  try {
+    const buffer = generateTemplateBuffer();
+    res.setHeader("Content-Disposition", 'attachment; filename="Template_Importacao_Turma.xlsx"');
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.send(buffer);
+  } catch (err) {
+    console.error("[turmas:template]", err);
+    res.status(500).json({ message: "Erro ao gerar template." });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/turmas/import/validate — Preview sem salvar
+// ─────────────────────────────────────────────────────────────────────────────
+router.post("/import/validate", upload.single("file"), async (req, res) => {
+  if (!req.file) return res.status(400).json({ message: "Arquivo não fornecido." });
+
+  try {
+    const { turma, alunos } = parseWorksheet(req.file.buffer, req.file.originalname);
+    
+    // Check if Turma name already exists for this professor
+    const tCheck = await pool.query(
+      "SELECT id FROM turmas WHERE professor_id = $1 AND nome = $2 AND ativo = TRUE",
+      [req.user.userId, turma.nome]
+    );
+
+    if (tCheck.rows.length > 0) {
+      turma.warning = "O Nome dessa turma já existe na sua conta. O sistema NÃO permite sobreescrevê-la. Revise o nome na planilha.";
+      turma.collide = true;
+    }
+
+    return res.json({ turma, alunos });
+  } catch (err) {
+    return res.status(400).json({ message: err.message });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/turmas/import/execute — Salvar turma e alunos no banco via transação
+// ─────────────────────────────────────────────────────────────────────────────
+router.post("/import/execute", async (req, res) => {
+  const { turma, alunos } = req.body;
+  if (!turma || !alunos || !Array.isArray(alunos)) {
+    return res.status(400).json({ message: "Dados do preview (turma e alunos) são obrigatórios." });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    const tCheck = await client.query(
+      "SELECT id FROM turmas WHERE professor_id = $1 AND nome = $2 AND ativo = TRUE",
+      [req.user.userId, turma.nome]
+    );
+    if (tCheck.rows.length > 0) {
+      throw new Error(`A turma '${turma.nome}' já existe. Edite a planilha.`);
+    }
+
+    const { rows: [t] } = await client.query(
+      `INSERT INTO turmas (professor_id, nome, serie, turno, max_alunos)
+       VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+      [req.user.userId, turma.nome, turma.serie, turma.turno, Math.max(turma.maxAlunos || 50, alunos.length)]
+    );
+    const turmaId = t.id;
+
+    let matriculasVistas = new Set();
+    for (const a of alunos) {
+      if (matriculasVistas.has(a.matricula)) {
+         throw new Error(`Matrícula duplicada na planilha: ${a.matricula}`);
+      }
+      matriculasVistas.add(a.matricula);
+
+      await client.query(
+        `INSERT INTO alunos (turma_id, nome_completo, matricula, email, responsavel_telefone, responsavel_nome)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [turmaId, a.nomeCompleto, a.matricula, a.email, a.responsavelTelefone || null, a.responsavelNome || null]
+      );
+    }
+
+    await client.query("COMMIT");
+    return res.status(201).json({ message: "Turma importada com sucesso!", turmaId });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error("[import:execute]", err.message);
+    return res.status(400).json({ message: err.message || "Erro fatal ao salvar. Operação cancelada." });
+  } finally {
+    client.release();
+  }
+});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/turmas — listar turmas do professor
