@@ -4,7 +4,10 @@ const express    = require("express");
 const helmet     = require("helmet");
 const cors       = require("cors");
 const rateLimit  = require("express-rate-limit");
-const authRoutes = require("./routes/auth");
+const authRoutes      = require("./routes/auth");
+const turmasRoutes    = require("./routes/turmas");
+const alunosRoutes    = require("./routes/alunos");
+const presencasRoutes = require("./routes/presencas");
 
 const app = express();
 
@@ -73,6 +76,11 @@ app.use("/api/auth/login",           authLimiter, loginLimiter, authRoutes);
 app.use("/api/auth/forgot-password", authLimiter, resetLimiter, authRoutes);
 app.use("/api/auth/reset-password",  authLimiter, resetLimiter, authRoutes);
 app.use("/api/auth",                 authLimiter, authRoutes);
+
+// ── Turmas / Alunos / Presenças (JWT-protected via router middleware) ─────────
+app.use("/api/turmas",                       turmasRoutes);
+app.use("/api/turmas/:turmaId/alunos",       alunosRoutes);
+app.use("/api/presencas",                    presencasRoutes);
 
 // ── Health check ──────────────────────────────────────────────────────────────
 app.get("/health", (_req, res) => {

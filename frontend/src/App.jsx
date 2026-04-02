@@ -10,6 +10,9 @@ import LoginPage   from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
 import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import ResetPasswordPage  from "./pages/ResetPasswordPage";
+import TurmasPage  from "./pages/TurmasPage";
+import AlunosPage  from "./pages/AlunosPage";
+import ChamadaPage from "./pages/ChamadaPage";
 
 const isAuthenticated = () => {
   try {
@@ -61,6 +64,15 @@ export default function App() {
           } />
           <Route path="/conteudo" element={
             <PrivateRoute><Conteudo /></PrivateRoute>
+          } />
+          <Route path="/turmas" element={
+            <PrivateRoute><TurmasPage /></PrivateRoute>
+          } />
+          <Route path="/turmas/:turmaId/alunos" element={
+            <PrivateRoute><AlunosPage /></PrivateRoute>
+          } />
+          <Route path="/chamada" element={
+            <PrivateRoute><ChamadaPage /></PrivateRoute>
           } />
 
           {/* Rota desconhecida → login */}

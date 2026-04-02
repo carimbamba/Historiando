@@ -5,6 +5,8 @@ import AvatarCircle from "./AvatarCircle";
 
 const NAV = [
   { icon: "⊞", label: "Dashboard",    path: "/"            },
+  { icon: "📋", label: "Turmas",       path: "/turmas"      },
+  { icon: "✓", label: "Chamada",      path: "/chamada"     },
   { icon: "◫", label: "Mapa da Sala", path: "/mapa"        },
   { icon: "⚑", label: "Ocorrências",  path: "/ocorrencias" },
   { icon: "◉", label: "Analytics",    path: "/analytics"   },
