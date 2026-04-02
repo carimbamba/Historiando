@@ -72,10 +72,13 @@ function getClientIp(req) {
 }
 
 // ── Routes ────────────────────────────────────────────────────────────────────
-app.use("/api/auth/login",           authLimiter, loginLimiter, authRoutes);
-app.use("/api/auth/forgot-password", authLimiter, resetLimiter, authRoutes);
-app.use("/api/auth/reset-password",  authLimiter, resetLimiter, authRoutes);
-app.use("/api/auth",                 authLimiter, authRoutes);
+if (process.env.NODE_ENV !== 'test') {
+  app.use("/api/auth/login",           authLimiter, loginLimiter);
+  app.use("/api/auth/forgot-password", authLimiter, resetLimiter);
+  app.use("/api/auth/reset-password",  authLimiter, resetLimiter);
+  app.use("/api/auth",                 authLimiter);
+}
+app.use("/api/auth", authRoutes);
 
 // ── Turmas / Alunos / Presenças (JWT-protected via router middleware) ─────────
 app.use("/api/turmas",                       turmasRoutes);

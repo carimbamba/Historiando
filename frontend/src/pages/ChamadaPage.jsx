@@ -141,26 +141,29 @@ export default function ChamadaPage() {
   // ── Export Excel ──────────────────────────────────────────────────────
   const exportar = async () => {
     try {
-      const XLSX = await import("xlsx");
+      setLoading(true);
       const res = await fetch(
-        `${API}/api/presencas/exportar?turmaId=${selectedTurma}`,
+        `${API}/api/presencas/exportar?turmaId=${selectedTurma}&data=${data}`,
         { headers: { Authorization: `Bearer ${getToken()}` } }
       );
       if (!res.ok) throw new Error();
-      const d = await res.json();
-
-      const wsData = [["Nome", "Matrícula", "Data", "Status", "Observações"]];
-      d.registros.forEach((r) => {
-        wsData.push([r.nome_completo, r.matricula, r.data?.slice(0, 10), r.status, r.observacoes || ""]);
-      });
-
-      const ws = XLSX.utils.aoa_to_sheet(wsData);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "Presenças");
-      XLSX.writeFile(wb, `presencas_${d.turma}_${data}.xlsx`);
+      
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      // Backend envia o header Content-Disposition com o nome, mas podemos definir um fallback
+      a.download = `Chamada_Export_${data}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+      
       toast("Planilha exportada com sucesso!");
     } catch {
       toast("Erro ao exportar. Verifique a conexão.", "error");
+    } finally {
+      setLoading(false);
     }
   };
 

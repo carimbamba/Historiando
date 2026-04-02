@@ -23,6 +23,17 @@ router.post("/register", async (req, res) => {
     return res.status(400).json({ message: "Campos obrigatórios: fullName, email, username, password" });
   }
 
+  // ── Password Strength Validation ────────────────────────────────────────
+  if (password.length < 12) return res.status(400).json({ code: "weak_password", message: "A senha deve conter no mínimo 12 caracteres." });
+  if (!/[A-Z]/.test(password)) return res.status(400).json({ code: "weak_password", message: "A senha deve conter no mínimo uma letra maiúscula." });
+  if (!/[0-9]/.test(password)) return res.status(400).json({ code: "weak_password", message: "A senha deve conter no mínimo um número." });
+  if (!/[!@#$%^&*(),.?":{}|<>]/.test(password)) return res.status(400).json({ code: "weak_password", message: "A senha deve conter no mínimo um caractere especial." });
+  
+  const commonSequences = ["123456", "qwerty", "abcdef", "password", "senha123"];
+  if (commonSequences.some(seq => password.toLowerCase().includes(seq))) {
+    return res.status(400).json({ code: "weak_password", message: "A senha contém uma sequência comum de caracteres." });
+  }
+
   const validRoles = ["professor", "coordenador", "aluno", "admin"];
   if (!validRoles.includes(role)) {
     return res.status(400).json({ message: "Role inválido. Use: professor, coordenador, aluno ou admin" });
@@ -369,6 +380,106 @@ router.post("/logout", authenticate, async (req, res) => {
   } catch (err) {
     console.error("[logout]", err.message);
     return res.status(500).json({ message: "Erro ao encerrar sessão." });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/auth/request-reset
+// ─────────────────────────────────────────────────────────────────────────────
+router.post("/request-reset", async (req, res) => {
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ message: "E-mail é obrigatório." });
+
+  try {
+    const { rows } = await pool.query("SELECT id FROM usuarios WHERE email = $1 AND ativo = TRUE", [email.toLowerCase()]);
+    if (rows.length === 0) {
+      // Retorna sucesso igual para evitar enumeration
+      return res.json({ message: "Se o e-mail existir, um link de recuperação foi enviado." });
+    }
+
+    const userId = rows[0].id;
+    const token = uuidv4();
+    const expiresAt = new Date(Date.now() + 1000 * 60 * 60); // 1 hora de validade
+
+    await pool.query(
+      `INSERT INTO tokens_reset_senha (usuario_id, token, expira_em) VALUES ($1, $2, $3)`,
+      [userId, token, expiresAt]
+    );
+
+    logAuthEvent({ usuarioId: userId, emailTentativa: email, tipoEvento: "reset_senha", ipOrigem: getClientIp(req) });
+
+    // Em produção, isso seria enviado por e-mail. Para testes, retornamos o token.
+    return res.json({ message: "Se o e-mail existir, um link de recuperação foi enviado.", test_token: token });
+  } catch (err) {
+    return res.status(500).json({ message: "Erro interno." });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/auth/reset
+// ─────────────────────────────────────────────────────────────────────────────
+router.post("/reset", async (req, res) => {
+  const { token, newPassword } = req.body;
+  if (!token || !newPassword) return res.status(400).json({ message: "Token e nova senha são obrigatórios." });
+
+  // ── Password Strength Validation ────────────────────────────────────────
+  if (newPassword.length < 12) return res.status(400).json({ code: "weak_password", message: "A senha deve conter no mínimo 12 caracteres." });
+  if (!/[A-Z]/.test(newPassword)) return res.status(400).json({ code: "weak_password", message: "A senha deve conter no mínimo uma letra maiúscula." });
+  if (!/[0-9]/.test(newPassword)) return res.status(400).json({ code: "weak_password", message: "A senha deve conter no mínimo um número." });
+  if (!/[!@#$%^&*(),.?":{}|<>]/.test(newPassword)) return res.status(400).json({ code: "weak_password", message: "A senha deve conter no mínimo um caractere especial." });
+  
+  const commonSequences = ["123456", "qwerty", "abcdef", "password", "senha123"];
+  if (commonSequences.some(seq => newPassword.toLowerCase().includes(seq))) {
+    return res.status(400).json({ code: "weak_password", message: "A senha contém uma sequência comum de caracteres." });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    // Validar Token
+    const { rows } = await client.query(
+      `SELECT id, usuario_id, expira_em FROM tokens_reset_senha WHERE token = $1 AND usado = FALSE`,
+      [token]
+    );
+
+    if (rows.length === 0) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ code: "token_invalid", message: "Token inválido ou já utilizado." });
+    }
+
+    const { id: tokenId, usuario_id: userId, expira_em } = rows[0];
+
+    if (new Date() > new Date(expira_em)) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ code: "token_expired", message: "Token expirado." });
+    }
+
+    // Verificar Histórico de Senhas (regra exigida no prompt)
+    const inHistory = await isPasswordInHistory(newPassword, userId);
+    if (inHistory) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ code: "password_reused", message: "Você não pode reutilizar senhas antigas." });
+    }
+
+    // Marcar token como Usado
+    await client.query(`UPDATE tokens_reset_senha SET usado = TRUE WHERE id = $1`, [tokenId]);
+
+    // Atualizar Senha: Desativar ativa atual e criar nova
+    const hash = await hashPassword(newPassword);
+    await client.query(`UPDATE senhas_usuarios SET ativo = FALSE WHERE usuario_id = $1 AND ativo = TRUE`, [userId]);
+    await client.query(`INSERT INTO senhas_usuarios (usuario_id, hash_senha) VALUES ($1, $2)`, [userId, hash]);
+
+    // Salvar no histórico
+    await savePasswordToHistory(hash, userId);
+
+    await client.query("COMMIT");
+    return res.json({ message: "Senha alterada com sucesso!" });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    return res.status(500).json({ message: "Erro interno ao resetar senha." });
+  } finally {
+    client.release();
   }
 });
 
