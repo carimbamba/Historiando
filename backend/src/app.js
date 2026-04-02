@@ -30,17 +30,49 @@ app.use(cors({
 // ── Body parser ───────────────────────────────────────────────────────────────
 app.use(express.json({ limit: "1mb" }));
 
-// ── Rate limiter (auth endpoints) ────────────────────────────────────────────
+// ── Rate limiters (granulares por endpoint) ──────────────────────────────────
+
+// Geral: proteção ampla contra abuso em todos os endpoints de auth
 const authLimiter = rateLimit({
-  windowMs:        15 * 60 * 1000, // 15 minutes
+  windowMs:        15 * 60 * 1000, // 15 minutos
   max:             20,
   standardHeaders: true,
   legacyHeaders:   false,
   message:         { message: "Muitas tentativas. Aguarde alguns minutos e tente novamente." },
 });
 
+// Login: máximo 5 tentativas por IP em 15 minutos (anti brute-force)
+const loginLimiter = rateLimit({
+  windowMs:        15 * 60 * 1000,
+  max:             5,
+  standardHeaders: true,
+  legacyHeaders:   false,
+  keyGenerator:    (req) => getClientIp(req),
+  message:         { message: "Muitas tentativas de login. Aguarde 15 minutos." },
+});
+
+// Reset senha: máximo 3 tentativas por IP em 1 hora
+const resetLimiter = rateLimit({
+  windowMs:        60 * 60 * 1000,
+  max:             3,
+  standardHeaders: true,
+  legacyHeaders:   false,
+  keyGenerator:    (req) => getClientIp(req),
+  message:         { message: "Limite de solicitações de reset atingido. Tente novamente em 1 hora." },
+});
+
+// ── Helper ────────────────────────────────────────────────────────────────────
+function getClientIp(req) {
+  const forwarded = req.headers["x-forwarded-for"];
+  if (forwarded) return String(forwarded).split(",")[0].trim();
+  return req.socket?.remoteAddress || "unknown";
+}
+
 // ── Routes ────────────────────────────────────────────────────────────────────
-app.use("/api/auth", authLimiter, authRoutes);
+app.use("/api/auth/login",           authLimiter, loginLimiter, authRoutes);
+app.use("/api/auth/forgot-password", authLimiter, resetLimiter, authRoutes);
+app.use("/api/auth/reset-password",  authLimiter, resetLimiter, authRoutes);
+app.use("/api/auth",                 authLimiter, authRoutes);
 
 // ── Health check ──────────────────────────────────────────────────────────────
 app.get("/health", (_req, res) => {

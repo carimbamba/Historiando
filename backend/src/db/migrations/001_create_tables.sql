@@ -12,9 +12,16 @@ EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
 DO $$ BEGIN
-  CREATE TYPE evento_enum AS ENUM ('login_sucesso', 'login_falha', 'cadastro', 'reset_senha');
+  CREATE TYPE evento_enum AS ENUM ('login_sucesso', 'login_falha', 'cadastro', 'reset_senha', 'logout');
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
+
+-- Adiciona 'logout' se o enum já existia sem ele
+DO $$ BEGIN
+  ALTER TYPE evento_enum ADD VALUE IF NOT EXISTS 'logout';
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
 
 CREATE TABLE IF NOT EXISTS usuarios (
   id            UUID PRIMARY KEY DEFAULT uuid_generate_v4(),

@@ -343,4 +343,33 @@ router.post("/reset-password", async (req, res) => {
   }
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/auth/logout  (protected)
+// ─────────────────────────────────────────────────────────────────────────────
+router.post("/logout", authenticate, async (req, res) => {
+  const ip        = getClientIp(req);
+  const userAgent = req.headers["user-agent"] || null;
+
+  try {
+    // ── Blacklist the token until its natural expiration ─────────────────
+    const { revokeToken } = require("../services/tokenBlacklist");
+    const expiresAtMs     = req.user.exp * 1000; // JWT exp is in seconds
+    revokeToken(req.token, expiresAtMs);
+
+    // ── Audit log ─────────────────────────────────────────────────────────
+    logAuthEvent({
+      usuarioId:     req.user.userId,
+      emailTentativa: req.user.email,
+      tipoEvento:    "logout",
+      ipOrigem:      ip,
+      userAgent,
+    });
+
+    return res.status(200).json({ sucesso: true, message: "Sessão encerrada com sucesso." });
+  } catch (err) {
+    console.error("[logout]", err.message);
+    return res.status(500).json({ message: "Erro ao encerrar sessão." });
+  }
+});
+
 module.exports = router;
