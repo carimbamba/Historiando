@@ -6,8 +6,15 @@
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- ── 1. usuarios ──────────────────────────────────────────────
-CREATE TYPE role_enum AS ENUM ('professor', 'coordenador', 'aluno', 'admin');
-CREATE TYPE evento_enum AS ENUM ('login_sucesso', 'login_falha', 'cadastro', 'reset_senha');
+DO $$ BEGIN
+  CREATE TYPE role_enum AS ENUM ('professor', 'coordenador', 'aluno', 'admin');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+  CREATE TYPE evento_enum AS ENUM ('login_sucesso', 'login_falha', 'cadastro', 'reset_senha');
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
 
 CREATE TABLE IF NOT EXISTS usuarios (
   id            UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
