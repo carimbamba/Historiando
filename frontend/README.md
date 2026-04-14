@@ -129,7 +129,7 @@ historiando/
 
 ## 🌍 Deploy no Vercel 
 
-https://historiando-rust.vercel.app/
+https://historiando-rust.vercel.app/login
 
 ---
 
